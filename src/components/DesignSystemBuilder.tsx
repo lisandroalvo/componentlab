@@ -221,13 +221,22 @@ export const DesignSystemBuilder: React.FC<DesignSystemBuilderProps> = ({
 // ComponentLab Generated Plugin
 figma.showUI(__html__, { width: 400, height: 600 });
 
+// Helper function to convert hex to RGB
+function hexToRgb(hex) {
+  if (!hex) return { r: 0.5, g: 0.5, b: 0.5 };
+  const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16) / 255,
+    g: parseInt(result[2], 16) / 255,
+    b: parseInt(result[3], 16) / 255
+  } : { r: 0.5, g: 0.5, b: 0.5 };
+}
+
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'create-components') {
     try {
-      // Load fonts
-      await figma.loadFontAsync({ family: "Inter", style: "Regular" });
-      await figma.loadFontAsync({ family: "Inter", style: "Medium" });
-      await figma.loadFontAsync({ family: "Inter", style: "Bold" });
+      // Load default fonts that are available in Figma
+      await figma.loadFontAsync({ family: "Roboto", style: "Regular" });
       
       const components = ${JSON.stringify(components, null, 2)};
       const options = ${JSON.stringify(options, null, 2)};
@@ -241,25 +250,29 @@ figma.ui.onmessage = async (msg) => {
       const spacing = options.frameSpacing || 100;
       
       for (const component of components) {
-        // Create frame for component
-        const frame = figma.createFrame();
-        frame.name = component.name;
-        frame.x = 0;
-        frame.y = yOffset;
-        
-        // Set frame properties based on component type
-        const frameWidth = component.type === 'button' ? 120 : 200;
-        const frameHeight = component.type === 'button' ? 40 : 60;
-        frame.resize(frameWidth, frameHeight);
-        
-        // Create component variants
         let xOffset = 0;
+        const frameHeight = component.type === 'button' ? 44 : 80;
+        const frameWidth = component.type === 'button' ? 120 : 200;
+        
+        // Create main component set frame
+        const componentSet = figma.createFrame();
+        componentSet.name = component.name + " Component Set";
+        componentSet.x = 0;
+        componentSet.y = yOffset;
+        componentSet.layoutMode = "HORIZONTAL";
+        componentSet.itemSpacing = 20;
+        componentSet.paddingLeft = 20;
+        componentSet.paddingRight = 20;
+        componentSet.paddingTop = 20;
+        componentSet.paddingBottom = 20;
+        componentSet.fills = [{ type: 'SOLID', color: { r: 0.98, g: 0.98, b: 0.98 } }];
+        
         for (const variant of component.variants) {
+          // Create variant frame
           const variantFrame = figma.createFrame();
           variantFrame.name = variant.name;
-          variantFrame.x = xOffset;
-          variantFrame.y = 0;
           variantFrame.resize(frameWidth, frameHeight);
+          variantFrame.fills = [];
           
           // Apply styles based on component type and variant
           const styles = {...component.baseStyles, ...variant.styles};
@@ -267,76 +280,93 @@ figma.ui.onmessage = async (msg) => {
           if (component.type === 'button') {
             // Create button rectangle
             const rect = figma.createRectangle();
-            rect.resize(frameWidth - 20, frameHeight - 20);
-            rect.x = 10;
-            rect.y = 10;
+            rect.resize(frameWidth, frameHeight);
+            rect.x = 0;
+            rect.y = 0;
             
             // Apply button styles
-            if (styles.backgroundColor) {
-              const color = hexToRgb(styles.backgroundColor);
-              rect.fills = [{ type: 'SOLID', color: { r: color.r/255, g: color.g/255, b: color.b/255 } }];
-            }
+            const bgColor = hexToRgb(styles.backgroundColor || '#3b82f6');
+            rect.fills = [{ type: 'SOLID', color: bgColor }];
             
             if (styles.borderRadius) {
-              rect.cornerRadius = parseInt(styles.borderRadius);
+              const radius = parseInt(styles.borderRadius.replace('px', '')) || 8;
+              rect.cornerRadius = radius;
+            } else {
+              rect.cornerRadius = 8;
             }
             
             // Add button text
             const text = figma.createText();
             text.characters = variant.name || 'Button';
             text.fontSize = 14;
-            text.fontName = { family: "Inter", style: "Medium" };
-            text.x = 10;
-            text.y = (frameHeight - 20) / 2;
+            text.fontName = { family: "Roboto", style: "Regular" };
             text.textAlignHorizontal = 'CENTER';
+            text.textAlignVertical = 'CENTER';
+            text.resize(frameWidth, frameHeight);
+            text.x = 0;
+            text.y = 0;
             
-            if (styles.color) {
-              const textColor = hexToRgb(styles.color);
-              text.fills = [{ type: 'SOLID', color: { r: textColor.r/255, g: textColor.g/255, b: textColor.b/255 } }];
-            }
+            const textColor = hexToRgb(styles.color || '#ffffff');
+            text.fills = [{ type: 'SOLID', color: textColor }];
             
             variantFrame.appendChild(rect);
             variantFrame.appendChild(text);
           } else {
             // Generic component creation
             const rect = figma.createRectangle();
-            rect.resize(frameWidth - 20, frameHeight - 20);
-            rect.x = 10;
-            rect.y = 10;
+            rect.resize(frameWidth, frameHeight);
+            rect.x = 0;
+            rect.y = 0;
             
-            if (styles.backgroundColor) {
-              const color = hexToRgb(styles.backgroundColor);
-              rect.fills = [{ type: 'SOLID', color: { r: color.r/255, g: color.g/255, b: color.b/255 } }];
-            }
+            const bgColor = hexToRgb(styles.backgroundColor || '#f3f4f6');
+            rect.fills = [{ type: 'SOLID', color: bgColor }];
             
             if (styles.borderRadius) {
-              rect.cornerRadius = parseInt(styles.borderRadius);
+              const radius = parseInt(styles.borderRadius.replace('px', '')) || 8;
+              rect.cornerRadius = radius;
+            } else {
+              rect.cornerRadius = 8;
             }
             
+            // Add component label
+            const text = figma.createText();
+            text.characters = component.name;
+            text.fontSize = 12;
+            text.fontName = { family: "Roboto", style: "Regular" };
+            text.textAlignHorizontal = 'CENTER';
+            text.textAlignVertical = 'CENTER';
+            text.resize(frameWidth, frameHeight);
+            text.x = 0;
+            text.y = 0;
+            
+            const textColor = hexToRgb(styles.color || '#374151');
+            text.fills = [{ type: 'SOLID', color: textColor }];
+            
             variantFrame.appendChild(rect);
+            variantFrame.appendChild(text);
           }
           
-          frame.appendChild(variantFrame);
+          // Create component from variant frame
+          const componentNode = figma.createComponent();
+          componentNode.name = component.name + "/" + variant.name;
+          
+          // Copy children from variant frame to component
+          const children = [...variantFrame.children];
+          children.forEach(child => {
+            componentNode.appendChild(child);
+          });
+          
+          componentNode.resize(frameWidth, frameHeight);
+          componentSet.appendChild(componentNode);
+          
           xOffset += frameWidth + 20;
         }
         
-        // Create component from frame
-        const componentNode = figma.createComponent();
-        componentNode.name = component.name;
-        componentNode.appendChild(frame);
-        
-        yOffset += frameHeight + spacing;
+        yOffset += componentSet.height + spacing;
       }
       
-      // Helper function to convert hex to RGB
-      function hexToRgb(hex) {
-        const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
-        return result ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16)
-        } : { r: 0, g: 0, b: 0 };
-      }
+      // Zoom to fit all components
+      figma.viewport.scrollAndZoomIntoView(figma.currentPage.children);
       
       figma.notify('✨ ComponentLab design system created successfully!');
       figma.closePlugin();
