@@ -20,7 +20,7 @@ import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { motion } from 'motion/react';
 
 import { 
@@ -200,13 +200,340 @@ export const DesignSystemBuilder: React.FC<DesignSystemBuilderProps> = ({
   }, [selectedComponent, selectedComponentId]);
 
   const handleExport = async (options: FigmaExportOptions): Promise<void> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log('Exporting to Figma with options:', options);
-        console.log('Components to export:', components);
-        toast.success('🎨 Design system exported to Figma successfully!');
-        resolve();
-      }, 2000);
+    return new Promise((resolve, reject) => {
+      try {
+        // Generate Figma plugin files
+        const pluginManifest = {
+          name: "ComponentLab Design System",
+          id: `componentlab-${Date.now()}`,
+          api: "1.0.0",
+          main: "code.js",
+          ui: "ui.html",
+          capabilities: [],
+          enableProposedApi: false,
+          editorType: ["figma", "figjam"],
+          networkAccess: {
+            allowedDomains: ["none"]
+          }
+        };
+
+        const pluginCode = `
+// ComponentLab Generated Plugin
+figma.showUI(__html__, { width: 400, height: 600 });
+
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'create-components') {
+    try {
+      // Load fonts
+      await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+      await figma.loadFontAsync({ family: "Inter", style: "Medium" });
+      await figma.loadFontAsync({ family: "Inter", style: "Bold" });
+      
+      const components = ${JSON.stringify(components, null, 2)};
+      const options = ${JSON.stringify(options, null, 2)};
+      
+      // Create a new page for the design system
+      const page = figma.createPage();
+      page.name = "ComponentLab Design System";
+      figma.currentPage = page;
+      
+      let yOffset = 0;
+      const spacing = options.frameSpacing || 100;
+      
+      for (const component of components) {
+        // Create frame for component
+        const frame = figma.createFrame();
+        frame.name = component.name;
+        frame.x = 0;
+        frame.y = yOffset;
+        
+        // Set frame properties based on component type
+        const frameWidth = component.type === 'button' ? 120 : 200;
+        const frameHeight = component.type === 'button' ? 40 : 60;
+        frame.resize(frameWidth, frameHeight);
+        
+        // Create component variants
+        let xOffset = 0;
+        for (const variant of component.variants) {
+          const variantFrame = figma.createFrame();
+          variantFrame.name = variant.name;
+          variantFrame.x = xOffset;
+          variantFrame.y = 0;
+          variantFrame.resize(frameWidth, frameHeight);
+          
+          // Apply styles based on component type and variant
+          const styles = {...component.baseStyles, ...variant.styles};
+          
+          if (component.type === 'button') {
+            // Create button rectangle
+            const rect = figma.createRectangle();
+            rect.resize(frameWidth - 20, frameHeight - 20);
+            rect.x = 10;
+            rect.y = 10;
+            
+            // Apply button styles
+            if (styles.backgroundColor) {
+              const color = hexToRgb(styles.backgroundColor);
+              rect.fills = [{ type: 'SOLID', color: { r: color.r/255, g: color.g/255, b: color.b/255 } }];
+            }
+            
+            if (styles.borderRadius) {
+              rect.cornerRadius = parseInt(styles.borderRadius);
+            }
+            
+            // Add button text
+            const text = figma.createText();
+            text.characters = variant.name || 'Button';
+            text.fontSize = 14;
+            text.fontName = { family: "Inter", style: "Medium" };
+            text.x = 10;
+            text.y = (frameHeight - 20) / 2;
+            text.textAlignHorizontal = 'CENTER';
+            
+            if (styles.color) {
+              const textColor = hexToRgb(styles.color);
+              text.fills = [{ type: 'SOLID', color: { r: textColor.r/255, g: textColor.g/255, b: textColor.b/255 } }];
+            }
+            
+            variantFrame.appendChild(rect);
+            variantFrame.appendChild(text);
+          } else {
+            // Generic component creation
+            const rect = figma.createRectangle();
+            rect.resize(frameWidth - 20, frameHeight - 20);
+            rect.x = 10;
+            rect.y = 10;
+            
+            if (styles.backgroundColor) {
+              const color = hexToRgb(styles.backgroundColor);
+              rect.fills = [{ type: 'SOLID', color: { r: color.r/255, g: color.g/255, b: color.b/255 } }];
+            }
+            
+            if (styles.borderRadius) {
+              rect.cornerRadius = parseInt(styles.borderRadius);
+            }
+            
+            variantFrame.appendChild(rect);
+          }
+          
+          frame.appendChild(variantFrame);
+          xOffset += frameWidth + 20;
+        }
+        
+        // Create component from frame
+        const componentNode = figma.createComponent();
+        componentNode.name = component.name;
+        componentNode.appendChild(frame);
+        
+        yOffset += frameHeight + spacing;
+      }
+      
+      // Helper function to convert hex to RGB
+      function hexToRgb(hex) {
+        const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+        return result ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16)
+        } : { r: 0, g: 0, b: 0 };
+      }
+      
+      figma.notify('✨ ComponentLab design system created successfully!');
+      figma.closePlugin();
+      
+    } catch (error) {
+      figma.notify('Error creating components: ' + error.message);
+      console.error('Plugin error:', error);
+    }
+  }
+};
+`;
+
+        const pluginUI = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8f9fa;
+    }
+    .container {
+      max-width: 360px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .logo {
+      width: 48px;
+      height: 48px;
+      background: #6366f1;
+      border-radius: 12px;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #6b7280;
+    }
+    .stats {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      text-align: center;
+    }
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1f2937;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .button {
+      width: 100%;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .button:hover {
+      background: #5856eb;
+    }
+    .info {
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      font-size: 12px;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">CL</div>
+      <div class="title">ComponentLab</div>
+      <div class="subtitle">Design System Import</div>
+    </div>
+    
+    <div class="stats">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value">${components.length}</div>
+          <div class="stat-label">Components</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${components.reduce((sum, comp) => sum + comp.variants.length, 0)}</div>
+          <div class="stat-label">Variants</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${components.reduce((sum, comp) => sum + comp.variants.reduce((vSum, variant) => vSum + variant.states.length, 0), 0)}</div>
+          <div class="stat-label">States</div>
+        </div>
+      </div>
+    </div>
+    
+    <button class="button" onclick="createComponents()">
+      Create Components in Figma
+    </button>
+    
+    <div class="info">
+      This will create ${components.length} component${components.length !== 1 ? 's' : ''} with full auto-layout and responsive properties in your Figma file.
+    </div>
+  </div>
+  
+  <script>
+    function createComponents() {
+      parent.postMessage({ pluginMessage: { type: 'create-components' } }, '*');
+    }
+  </script>
+</body>
+</html>
+`;
+
+        // Create ZIP file content
+        const files = [
+          { name: 'manifest.json', content: JSON.stringify(pluginManifest, null, 2) },
+          { name: 'code.js', content: pluginCode },
+          { name: 'ui.html', content: pluginUI }
+        ];
+
+        // Generate and download ZIP file
+        setTimeout(async () => {
+          try {
+            // Import JSZip
+            const JSZip = (await import('jszip')).default;
+            const zip = new JSZip();
+
+            // Add files to ZIP
+            files.forEach(file => {
+              zip.file(file.name, file.content);
+            });
+
+            // Generate ZIP blob
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+            // Create download link
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(zipBlob);
+            downloadLink.download = `componentlab-figma-plugin-${Date.now()}.zip`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+
+            // Clean up
+            URL.revokeObjectURL(downloadLink.href);
+
+            toast.success('🎨 Figma plugin downloaded successfully! Install it in Figma to import your components.');
+            resolve();
+          } catch (error) {
+            console.error('Download error:', error);
+            toast.error('Download failed. Please try again.');
+            reject(error);
+          }
+        }, 1500);
+
+      } catch (error) {
+        console.error('Export error:', error);
+        toast.error('Export failed. Please try again.');
+        reject(error);
+      }
     });
   };
 
